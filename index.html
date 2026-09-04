@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مطابقة صور البلاغات</title>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
+<style>
+  :root{
+    --ink:#1c2b2d;
+    --paper:#f6f3ec;
+    --line:#d8d2c2;
+    --moss:#3f5d52;
+    --moss-dark:#2c4239;
+    --amber:#c17a37;
+    --ok:#3f5d52;
+    --err:#a3453a;
+    --card:#ffffff;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Tahoma','Segoe UI',sans-serif;
+    line-height:1.6;
+    padding:28px 16px 60px;
+  }
+  .wrap{max-width:640px;margin:0 auto;}
+  h1{
+    font-size:22px;
+    margin:0 0 4px;
+    font-weight:700;
+    color:var(--moss-dark);
+  }
+  .sub{
+    color:#5c6b63;
+    font-size:14px;
+    margin:0 0 28px;
+  }
+  .step{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:18px;
+    margin-bottom:16px;
+  }
+  .step-head{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom:12px;
+  }
+  .step-num{
+    width:26px;height:26px;
+    border-radius:50%;
+    background:var(--moss);
+    color:#fff;
+    display:flex;align-items:center;justify-content:center;
+    font-size:13px;
+    flex-shrink:0;
+  }
+  .step-title{font-weight:700;font-size:15px;}
+  .file-btn{
+    display:block;
+    width:100%;
+    padding:14px;
+    border:1.5px dashed var(--line);
+    border-radius:8px;
+    text-align:center;
+    background:#fbfaf6;
+    color:var(--moss-dark);
+    font-size:14px;
+    cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  .file-btn:active{background:#f0ede2;}
+  .file-btn input{display:none;}
+  .file-status{
+    margin-top:8px;
+    font-size:13px;
+    color:#5c6b63;
+    word-break:break-word;
+  }
+  .file-status.filled{color:var(--moss-dark);font-weight:600;}
+  button.run{
+    width:100%;
+    padding:15px;
+    border:none;
+    border-radius:8px;
+    background:var(--moss);
+    color:#fff;
+    font-size:16px;
+    font-weight:700;
+    cursor:pointer;
+    margin-top:4px;
+  }
+  button.run:disabled{
+    background:#9fae9f;
+    cursor:not-allowed;
+  }
+  button.run:active:not(:disabled){background:var(--moss-dark);}
+  #log{
+    margin-top:18px;
+    background:#22302b;
+    color:#dce8de;
+    border-radius:8px;
+    padding:14px;
+    font-family:'SFMono-Regular',Consolas,monospace;
+    font-size:12.5px;
+    max-height:280px;
+    overflow-y:auto;
+    white-space:pre-wrap;
+    display:none;
+  }
+  #log.show{display:block;}
+  .log-line{margin-bottom:3px;}
+  .log-ok{color:#8fd4a3;}
+  .log-warn{color:#e8b46a;}
+  .log-err{color:#e88f8f;}
+  #result{
+    margin-top:16px;
+    display:none;
+  }
+  #result.show{display:block;}
+  .result-card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:18px;
+    text-align:center;
+  }
+  .result-card p{margin:0 0 14px;font-size:14px;color:#5c6b63;}
+  a.download{
+    display:inline-block;
+    padding:12px 26px;
+    background:var(--amber);
+    color:#fff;
+    text-decoration:none;
+    border-radius:8px;
+    font-weight:700;
+    font-size:14px;
+  }
+  .note{
+    font-size:12.5px;
+    color:#8b8778;
+    margin-top:22px;
+    border-top:1px solid var(--line);
+    padding-top:14px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>مطابقة صور البلاغات بالإكسل</h1>
+  <p class="sub">ارفق ملف الإكسل وصور البلاغات، وسيتم قراءة رقم كل بلاغ من الصورة تلقائياً، قصّ الصورة (إزالة خلفية الشاشة)، ووضعها بجانب الرقم المطابق في ملف إكسل جديد.</p>
+
+  <div class="step">
+    <div class="step-head">
+      <div class="step-num">1</div>
+      <div class="step-title">ملف الإكسل</div>
+    </div>
+    <label class="file-btn">
+      اضغط لإرفاق ملف الإكسل (xlsx)
+      <input type="file" id="excelInput" accept=".xlsx,.xlsm">
+    </label>
+    <div class="file-status" id="excelStatus">لم يتم إرفاق ملف بعد</div>
+  </div>
+
+  <div class="step">
+    <div class="step-head">
+      <div class="step-num">2</div>
+      <div class="step-title">صور البلاغات</div>
+    </div>
+    <label class="file-btn">
+      اضغط لإرفاق صورة أو أكثر
+      <input type="file" id="imagesInput" accept="image/*" multiple>
+    </label>
+    <div class="file-status" id="imagesStatus">لم يتم إرفاق صور بعد</div>
+  </div>
+
+  <button class="run" id="runBtn" disabled>تنفيذ ومطابقة</button>
+
+  <div id="log"></div>
+
+  <div id="result">
+    <div class="result-card">
+      <p id="resultText"></p>
+      <a class="download" id="downloadLink" href="#">تنزيل ملف الإكسل الناتج</a>
+    </div>
+  </div>
+
+  <div class="note">
+    يبحث الكود عن رقم بصيغة <b>INC-YY-MM-XXXXXX</b> داخل كل صورة وفي كل خلية بملف الإكسل. عند التطابق، يُقصّ إطار الصورة تلقائياً (إزالة خلفية الشاشة المحيطة به)، ثم توضع الصورة بحجم صغير داخل الخلية المجاورة لرقم البلاغ. الصور التي لا يوجد لها رقم مطابق توضع في ورقة إضافية باسم "صور غير مطابقة" مع الرقم المستخرج منها إن وُجد.
+    <br><br>
+    لزيادة دقة قراءة الرقم، يجرّب الكود عدة مناطق وأوضاع قراءة لكل صورة، لذلك قد تستغرق كل صورة بضع ثوانٍ إضافية — هذا طبيعي وليس تعليقاً في التنفيذ.
+  </div>
+</div>
+
+<script>
+const REPORT_REGEX = /INC-\d{2}-\d{2}-\d{6}/i;
+
+const excelInput = document.getElementById('excelInput');
+const imagesInput = document.getElementById('imagesInput');
+const excelStatus = document.getElementById('excelStatus');
+const imagesStatus = document.getElementById('imagesStatus');
+const runBtn = document.getElementById('runBtn');
+const logEl = document.getElementById('log');
+const resultEl = document.getElementById('result');
+const resultText = document.getElementById('resultText');
+const downloadLink = document.getElementById('downloadLink');
+
+let excelFile = null;
+let imageFiles = [];
+
+function log(msg, type){
+  logEl.classList.add('show');
+  const line = document.createElement('div');
+  line.className = 'log-line' + (type ? ' log-' + type : '');
+  line.textContent = msg;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function updateRunState(){
+  runBtn.disabled = !(excelFile && imageFiles.length > 0);
+}
+
+excelInput.addEventListener('change', () => {
+  excelFile = excelInput.files[0] || null;
+  if(excelFile){
+    excelStatus.textContent = 'تم إرفاق: ' + excelFile.name;
+    excelStatus.classList.add('filled');
+  } else {
+    excelStatus.textContent = 'لم يتم إرفاق ملف بعد';
+    excelStatus.classList.remove('filled');
+  }
+  updateRunState();
+});
+
+imagesInput.addEventListener('change', () => {
+  imageFiles = Array.from(imagesInput.files || []);
+  if(imageFiles.length){
+    imagesStatus.textContent = 'تم إرفاق ' + imageFiles.length + ' صورة';
+    imagesStatus.classList.add('filled');
+  } else {
+    imagesStatus.textContent = 'لم يتم إرفاق صور بعد';
+    imagesStatus.classList.remove('filled');
+  }
+  updateRunState();
+});
+
+// ---------- OCR ----------
+function upscaleCanvas(srcCanvas, factor){
+  if(factor <= 1) return srcCanvas;
+  const out = document.createElement('canvas');
+  out.width = Math.round(srcCanvas.width * factor);
+  out.height = Math.round(srcCanvas.height * factor);
+  const octx = out.getContext('2d');
+  octx.imageSmoothingEnabled = true;
+  octx.drawImage(srcCanvas, 0, 0, out.width, out.height);
+  return out;
+}
+
+// تحويل لتدرج الرمادي + تمديد التباين البسيط، يحسّن دقة OCR على النصوص الملوّنة
+function enhanceForOCR(canvas){
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const d = imgData.data;
+  let min = 255, max = 0;
+  for(let i = 0; i < d.length; i += 4){
+    const gray = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+    d[i] = d[i+1] = d[i+2] = gray;
+    if(gray < min) min = gray;
+    if(gray > max) max = gray;
+  }
+  const range = Math.max(1, max - min);
+  for(let i = 0; i < d.length; i += 4){
+    const v = ((d[i] - min) / range) * 255;
+    d[i] = d[i+1] = d[i+2] = v;
+  }
+  ctx.putImageData(imgData, 0, 0);
+  return canvas;
+}
+
+async function ocrRegion(canvas, worker, psm){
+  await worker.setParameters({
+    tessedit_pageseg_mode: psm,
+    tessedit_char_whitelist: 'INC-0123456789'
+  });
+  const { data: { text } } = await worker.recognize(canvas);
+  return text;
+}
+
+async function extractReportNumber(imgEl, ocrWorker){
+  const w = imgEl.naturalWidth, h = imgEl.naturalHeight;
+  const heightFractions = [0.06, 0.10, 0.16, 0.25]; // شرائح علوية متدرجة الاتساع
+  const psmModes = ['7', '6', '11']; // سطر واحد ثم فقرة ثم نص متفرق
+
+  for(const psm of psmModes){
+    for(const frac of heightFractions){
+      const stripH = Math.max(Math.round(h * frac), 40);
+      const strip = document.createElement('canvas');
+      strip.width = w; strip.height = stripH;
+      strip.getContext('2d').drawImage(imgEl, 0, 0, w, stripH, 0, 0, w, stripH);
+
+      const scaleFactor = w < 1000 ? 2.2 : 1.4;
+      let proc = upscaleCanvas(strip, scaleFactor);
+      proc = enhanceForOCR(proc);
+
+      const text = await ocrRegion(proc, ocrWorker, psm);
+      const match = text.match(REPORT_REGEX);
+      if(match) return match[0];
+    }
+  }
+
+  // أخيراً: الصورة كاملة كحل احتياطي
+  for(const psm of ['6', '11']){
+    const full = document.createElement('canvas');
+    full.width = w; full.height = h;
+    full.getContext('2d').drawImage(imgEl, 0, 0);
+    enhanceForOCR(full);
+    const text = await ocrRegion(full, ocrWorker, psm);
+    const match = text.match(REPORT_REGEX);
+    if(match) return match[0];
+  }
+
+  return null;
+}
+
+// ---------- Auto-crop (إزالة خلفية الشاشة حول الصورة المرفقة) ----------
+// الطريقة: نحدد لون الخلفية بأخذ اللون الأكثر تكراراً في كامل الصورة (وليس فقط
+// الزوايا، لأن زوايا لقطة الشاشة قد تحتوي شريط الحالة الفاتح للجوال بدل خلفية
+// التطبيق)، ثم نبحث عن أكبر منطقة متصلة (Connected Component) تختلف عن هذا اللون.
+function findDominantColor(data){
+  const counts = new Map();
+  for(let i = 0; i < data.length; i += 4){
+    const r = data[i] >> 3, g = data[i+1] >> 3, b = data[i+2] >> 3; // تكميم لتقليل عدد الفئات
+    const key = (r << 10) | (g << 5) | b;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  let bestKey = null, bestCount = -1;
+  for(const [k, c] of counts){
+    if(c > bestCount){ bestCount = c; bestKey = k; }
+  }
+  return [ ((bestKey >> 10) & 31) << 3, ((bestKey >> 5) & 31) << 3, (bestKey & 31) << 3 ];
+}
+
+function autoCropCanvas(imgEl){
+  const origW = imgEl.naturalWidth, origH = imgEl.naturalHeight;
+
+  // نحلل نسخة مصغّرة من الصورة لتسريع العملية
+  const maxDim = 480;
+  const scale = Math.min(1, maxDim / Math.max(origW, origH));
+  const w = Math.max(1, Math.round(origW * scale));
+  const h = Math.max(1, Math.round(origH * scale));
+
+  const smallCanvas = document.createElement('canvas');
+  smallCanvas.width = w; smallCanvas.height = h;
+  const sctx = smallCanvas.getContext('2d');
+  sctx.drawImage(imgEl, 0, 0, w, h);
+  const data = sctx.getImageData(0, 0, w, h).data;
+
+  const bg = findDominantColor(data);
+  const threshold = 42;
+
+  const mask = new Uint8Array(w * h);
+  for(let p = 0, i = 0; p < w * h; p++, i += 4){
+    const dr = data[i] - bg[0], dg = data[i+1] - bg[1], db = data[i+2] - bg[2];
+    mask[p] = (Math.sqrt(dr*dr + dg*dg + db*db) > threshold) ? 1 : 0;
+  }
+
+  // أكبر منطقة متصلة (BFS)
+  const visited = new Uint8Array(w * h);
+  const stack = new Int32Array(w * h);
+  let best = null;
+
+  for(let idx = 0; idx < w * h; idx++){
+    if(mask[idx] && !visited[idx]){
+      let top = 0;
+      stack[top++] = idx;
+      visited[idx] = 1;
+      let area = 0, minX = w, minY = h, maxX = 0, maxY = 0;
+      while(top > 0){
+        const cur = stack[--top];
+        const y = (cur / w) | 0, x = cur % w;
+        area++;
+        if(x < minX) minX = x; if(x > maxX) maxX = x;
+        if(y < minY) minY = y; if(y > maxY) maxY = y;
+        if(x > 0){ const n = cur - 1; if(mask[n] && !visited[n]){ visited[n]=1; stack[top++]=n; } }
+        if(x < w-1){ const n = cur + 1; if(mask[n] && !visited[n]){ visited[n]=1; stack[top++]=n; } }
+        if(y > 0){ const n = cur - w; if(mask[n] && !visited[n]){ visited[n]=1; stack[top++]=n; } }
+        if(y < h-1){ const n = cur + w; if(mask[n] && !visited[n]){ visited[n]=1; stack[top++]=n; } }
+      }
+      if(!best || area > best.area) best = { area, minX, minY, maxX, maxY };
+    }
+  }
+
+  const fullCanvas = document.createElement('canvas');
+  fullCanvas.width = origW; fullCanvas.height = origH;
+  fullCanvas.getContext('2d').drawImage(imgEl, 0, 0);
+
+  if(!best || best.area < w * h * 0.06){
+    return fullCanvas; // لم يُعثر على منطقة واضحة، أعد الصورة كاملة
+  }
+
+  const sx = origW / w, sy = origH / h;
+  let left = Math.floor(best.minX * sx);
+  let top = Math.floor(best.minY * sy);
+  let right = Math.ceil((best.maxX + 1) * sx);
+  let bottom = Math.ceil((best.maxY + 1) * sy);
+
+  const padX = Math.round((right - left) * 0.01);
+  const padY = Math.round((bottom - top) * 0.01);
+  left = Math.min(left + padX, origW - 1);
+  top = Math.min(top + padY, origH - 1);
+  right = Math.max(right - padX, left + 1);
+  bottom = Math.max(bottom - padY, top + 1);
+
+  const cw = right - left, ch = bottom - top;
+  const outCanvas = document.createElement('canvas');
+  outCanvas.width = cw; outCanvas.height = ch;
+  outCanvas.getContext('2d').drawImage(fullCanvas, left, top, cw, ch, 0, 0, cw, ch);
+  return outCanvas;
+}
+
+function loadImage(file){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function canvasToArrayBuffer(canvas){
+  return new Promise(resolve => {
+    canvas.toBlob(blob => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.readAsArrayBuffer(blob);
+    }, 'image/png');
+  });
+}
+
+// ---------- المعالجة الرئيسية ----------
+runBtn.addEventListener('click', async () => {
+  runBtn.disabled = true;
+  logEl.innerHTML = '';
+  resultEl.classList.remove('show');
+  log('جاري تحميل ملف الإكسل...');
+
+  const excelBuffer = await excelFile.arrayBuffer();
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(excelBuffer);
+
+  // ابحث عن كل الخلايا التي تحتوي رقم بلاغ
+  const matches = {}; // reportNumber -> {sheet, row, col}
+  workbook.eachSheet(sheet => {
+    sheet.eachRow((row, rowNumber) => {
+      row.eachCell((cell, colNumber) => {
+        const val = cell.value;
+        if(typeof val === 'string'){
+          const m = val.match(REPORT_REGEX);
+          if(m){
+            matches[m[0]] = { sheet, row: rowNumber, col: colNumber };
+          }
+        }
+      });
+    });
+  });
+
+  log('تم العثور على ' + Object.keys(matches).length + ' رقم بلاغ داخل الإكسل.', 'ok');
+
+  log('جاري تجهيز محرك التعرّف على النصوص (OCR)...');
+  const ocrWorker = await Tesseract.createWorker('eng');
+
+  const unmatched = [];
+
+  for(const file of imageFiles){
+    log('معالجة: ' + file.name);
+    let imgEl;
+    try{
+      imgEl = await loadImage(file);
+    }catch(e){
+      log('  تعذر فتح الصورة', 'err');
+      continue;
+    }
+
+    let reportNo;
+    try{
+      reportNo = await extractReportNumber(imgEl, ocrWorker);
+    }catch(e){
+      reportNo = null;
+    }
+
+    if(!reportNo){
+      log('  لم يتم العثور على رقم بلاغ في الصورة رغم عدة محاولات', 'warn');
+    } else {
+      log('  رقم البلاغ: ' + reportNo, 'ok');
+    }
+
+    const croppedCanvas = autoCropCanvas(imgEl);
+    const buffer = await canvasToArrayBuffer(croppedCanvas);
+    const imageId = workbook.addImage({ buffer, extension: 'png' });
+
+    // حجم صغير يناسب داخل خلية واحدة فقط
+    const w = croppedCanvas.width, h = croppedCanvas.height;
+    const maxW = 90, maxH = 90;
+    const ratio = Math.min(maxW / w, maxH / h, 1);
+    const dispW = Math.round(w * ratio), dispH = Math.round(h * ratio);
+
+    // تحويل البكسل إلى وحدات إكسل: النقاط للارتفاع، والأحرف للعرض
+    const rowHeightPt = dispH * 0.75;          // 1px ≈ 0.75pt
+    const colWidthChars = dispW / 7 + 0.9;      // ~7px لكل وحدة عرض عمود
+
+    if(reportNo && matches[reportNo]){
+      const m = matches[reportNo];
+      const targetCol = m.col + 1;
+      // تأكد من وجود عنوان للعمود المجاور
+      const headerCell = m.sheet.getRow(1).getCell(targetCol);
+      if(!headerCell.value){
+        headerCell.value = 'الصورة';
+        headerCell.font = { bold: true };
+      }
+      m.sheet.getRow(m.row).height = Math.max(m.sheet.getRow(m.row).height || 20, rowHeightPt + 4);
+      m.sheet.getColumn(targetCol).width = Math.max(m.sheet.getColumn(targetCol).width || 10, colWidthChars);
+      m.sheet.addImage(imageId, {
+        tl: { col: targetCol - 1 + 0.08, row: m.row - 1 + 0.08 },
+        ext: { width: dispW, height: dispH }
+      });
+      log('  تم إلحاقها بالصف المطابق في الإكسل', 'ok');
+    } else {
+      unmatched.push({ file, reportNo, imageId, dispW, dispH, rowHeightPt });
+    }
+  }
+
+  await ocrWorker.terminate();
+
+  // أضف الصور غير المطابقة في ورقة مستقلة
+  if(unmatched.length){
+    const sheet = workbook.getWorksheet('صور غير مطابقة') || workbook.addWorksheet('صور غير مطابقة');
+    sheet.views = [{ rightToLeft: true }];
+    if(sheet.rowCount === 0){
+      sheet.getCell('A1').value = 'رقم البلاغ المستخرج';
+      sheet.getCell('B1').value = 'اسم الملف';
+      sheet.getCell('C1').value = 'الصورة';
+      sheet.getRow(1).font = { bold: true };
+      sheet.getColumn(1).width = 24;
+      sheet.getColumn(2).width = 24;
+      sheet.getColumn(3).width = 40;
+    }
+    let r = sheet.lastRow ? sheet.lastRow.number + 1 : 2;
+    for(const u of unmatched){
+      sheet.getCell('A' + r).value = u.reportNo || 'غير معروف';
+      sheet.getCell('B' + r).value = u.file.name;
+      sheet.getRow(r).height = Math.max(sheet.getRow(r).height || 15, u.rowHeightPt + 4);
+      sheet.addImage(u.imageId, {
+        tl: { col: 2.08, row: r - 1 + 0.08 },
+        ext: { width: u.dispW, height: u.dispH }
+      });
+      r++;
+    }
+    log(unmatched.length + ' صورة بدون تطابق تم وضعها في ورقة "صور غير مطابقة"', 'warn');
+  }
+
+  log('جاري إنشاء ملف الإكسل النهائي...');
+  const outBuffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([outBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+
+  downloadLink.href = url;
+  downloadLink.download = 'البلاغات_مطابقة.xlsx';
+  resultText.textContent = 'تمت المعالجة: ' + (imageFiles.length - unmatched.length) + ' صورة مطابقة من أصل ' + imageFiles.length + '.';
+  resultEl.classList.add('show');
+  log('تم الانتهاء ✅', 'ok');
+
+  runBtn.disabled = false;
+});
+</script>
+</body>
+</html>
